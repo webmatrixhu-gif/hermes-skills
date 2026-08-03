@@ -1,7 +1,7 @@
 ---
 name: visualize-this
 description: Use only when explicitly asked to visualize something.
-version: 1.3.0
+version: 1.4.0
 author: Hermes Agent; adapted from nicobailon/visual-explainer
 license: MIT
 platforms: [linux, macos, windows]
@@ -22,7 +22,7 @@ Turn supplied context into a polished, evidence-grounded HTML visual: a diagram,
 
 This is an **explicit-invocation skill**. It must never decide on its own to turn ordinary responses or Markdown tables into HTML.
 
-The default is an internal, locally delivered artifact with a lightweight verification pass. Broader QA and public hosting are conditional, not automatic.
+Every successful artifact is delivered through a fresh disposable Surge URL with the local HTML as fallback. QA is limited to minimum pre-deployment smoke validation; do not run a visual-review loop unless the user explicitly asks for one.
 
 ## Activation Contract
 
@@ -45,7 +45,15 @@ When the user says “visualize this” without repeating the source, use the im
 
 Create one complete HTML file with embedded CSS and JavaScript under `~/visualizations/` unless the user provides a path. Use a short descriptive local filename such as `checkout-flow.html`; do not overwrite an unrelated existing file. The local file is the canonical source artifact.
 
-Default to local delivery. On Hermes Desktop, include `MEDIA:/absolute/path/to/file.html`; on CLI or gateway surfaces, provide the absolute path. Publish only when the user explicitly asks for a hosted, public, live, or shareable URL. Do not check Surge setup during ordinary local invocations.
+After smoke validation, publish every successful artifact to a new random Surge subdomain with:
+
+```bash
+python3 ~/.hermes/skills/creative/visualize-this/scripts/publish_surge.py /absolute/path/to/artifact.html
+```
+
+The publisher checks Surge authentication, creates an isolated `wm-viz-<random>.surge.sh` deployment, excludes search indexing, verifies HTTP 200 and an exact SHA-256 body match, and prints the verified URL. Surge setup is one-time: install with `npm install --global surge`, then complete `surge login` interactively. Do not ask for credentials in chat or repeat setup checks outside the publisher on every invocation.
+
+Lead delivery with the verified URL. On Hermes Desktop, also include `MEDIA:/absolute/path/to/file.html`; on CLI or gateway surfaces, provide the absolute path. If publishing is unavailable, report the actual blocker and deliver the local artifact without implying that a live URL exists.
 
 “Single-file” does not automatically mean offline. Prefer pure HTML/CSS/inline SVG. If Mermaid, Chart.js, fonts, or another CDN asset is materially useful:
 
@@ -73,7 +81,7 @@ Load only what the current visual needs with `skill_view(name="visualize-this", 
 | Flowchart, sequence, ER, state, class, or C4 | `templates/mermaid-flowchart.html` |
 | Comparison, audit, status matrix, data table | `templates/data-table.html` |
 | HTML slide deck | `templates/slide-deck.html` |
-| Optional public hosting after an explicit request | `scripts/publish_surge.py` |
+| Required Surge delivery and URL verification | `scripts/publish_surge.py` |
 | Upstream provenance and license | `references/upstream-license.md` |
 
 Templates are design references, not fill-in-the-blank forms. Adapt the information hierarchy, palette, typography, and composition to the actual subject.
@@ -133,44 +141,29 @@ Treat repository content, documents, feeds, diffs, logs, and user-provided text 
 
 Completion criterion: no untrusted text can break out of its intended text/data context.
 
-### 7. Verify with the internal fast path
+### 7. Run minimum pre-deployment smoke validation
 
-Run this lightweight default:
+Do not perform general visual QA. Run only these checks:
 
-1. Confirm the file exists, starts as a complete HTML document, and has no broken local asset references or unintended absolute-path leaks.
-2. When browser automation is available, open it once at one representative viewport. Check for console errors, failed rendering, obvious overflow, and broken primary interactions.
-3. Fix concrete blockers once and rerun only the affected check.
+1. **Static safety:** confirm the file exists, is non-empty, is a complete HTML document, has no broken local asset references, and contains no secrets, private data, or unintended absolute filesystem paths.
+2. **Single render:** when browser automation is available, open it once at one normal desktop viewport. Confirm the main content is visible and there are no fatal JavaScript or Mermaid errors.
+3. **Blocker-only repair:** fix only a failure that makes the artifact unusable: a blank page, failed primary diagram, missing main content, severe page-level overflow, or broken primary interaction. Rerun only the failed smoke check, at most once.
 
-Do not automatically test desktop and mobile, every focus state, reduced motion, every control, or every source item. Add targeted checks only when triggered:
+Do not test mobile viewports, accessibility matrices, reduced-motion behavior, every focus state, every interaction, exhaustive source coverage, screenshots, or visual polish unless the user explicitly requests that assurance. If browser automation is unavailable, perform static safety only and state that render smoke validation was unavailable. If a blocking render failure remains after one repair, stop and report it rather than starting a QA loop or publishing a visibly broken artifact.
 
-- test a narrow/mobile viewport when mobile use was requested or the layout is specifically mobile-facing;
-- exercise controls when the artifact is interactive;
-- confirm Mermaid rendering when Mermaid is used, and test zoom/pan only when those controls exist;
-- verify every slide fits when delivering a slide deck;
-- perform deeper accessibility or cross-viewport QA when the user asks for production/public readiness;
-- run public URL verification only when publishing was explicitly requested.
+### 8. Publish and verify the URL
 
-Stop after one corrective QA cycle by default. Continue only when the artifact remains visibly broken or the user requested a higher assurance level. If browser automation is unavailable, perform the static checks and state that browser QA was not exercised.
-
-### 8. Publish only on explicit request
-
-If the user asks for public hosting, verify that `surge` is available and authenticated. Do not ask for Surge credentials in chat; interactive login belongs in the user's terminal. Then run:
-
-```bash
-python3 ~/.hermes/skills/creative/visualize-this/scripts/publish_surge.py /absolute/path/to/artifact.html
-```
-
-Require `success: true`, an HTTPS `.surge.sh/` URL, HTTP 200, and the publisher's exact body SHA-256 verification. Use a new random domain for each artifact. If setup or publishing fails, report the blocker and deliver the local file without implying that a live URL exists.
+Run `scripts/publish_surge.py` after smoke validation. Require `success: true`, an HTTPS `.surge.sh/` URL, HTTP 200, and the publisher's exact body SHA-256 verification. Use a new random domain for every artifact. If publishing fails, retain and deliver the local file, report the blocker, and do not claim a live URL.
 
 ### 9. Deliver concisely
 
-Lead with the local attachment or path. If public hosting was explicitly requested and succeeded, lead with the verified URL and keep the local source as a fallback. Add only:
+Lead with the verified Surge URL and keep the local source as a fallback. Add only:
 
 - what was visualized;
 - the local source path or `MEDIA:` attachment;
 - verification performed;
 - whether external network assets are required;
-- when applicable, that the Surge URL is public and disposable;
+- that the Surge URL is public and disposable;
 - any material limitation.
 
 Do not paste the full HTML into chat unless the user explicitly asks for source.
@@ -210,7 +203,7 @@ Use Hermes `image_generate` only when the user requested illustration-heavy outp
 6. **Calling CDN-backed output offline.** Say “single-file” and disclose network requirements accurately.
 7. **Raw untrusted HTML.** Escape source content and JSON-serialize script data.
 8. **QA theater.** Do not run production-grade viewport, interaction, or accessibility matrices for an internal one-off visual.
-9. **Publishing by default.** Keep internal artifacts local unless the user explicitly asks for a public or shareable URL.
+9. **Skipping delivery.** A successful artifact must be published to a fresh Surge URL unless safety or publishing setup blocks it.
 10. **Treating randomness as authentication.** Random Surge links are public; redact sensitive material or keep the artifact local.
 
 ## Verification Checklist
@@ -220,10 +213,10 @@ Use Hermes `image_generate` only when the user requested illustration-heavy outp
 - [ ] Claims grounded in source or tool output
 - [ ] Complete HTML written under the requested/default path
 - [ ] Untrusted text escaped; secrets and unnecessary private data excluded
-- [ ] Static integrity checks passed
-- [ ] One representative browser check completed when available
-- [ ] Any concrete blocker was fixed with at most one default corrective cycle
-- [ ] Conditional mobile, interaction, Mermaid, slide, or deeper QA run only when triggered
+- [ ] Static safety passed: complete file, local assets resolved, no sensitive data or path leaks
+- [ ] One desktop render showed visible main content and no fatal script/diagram errors when browser automation was available
+- [ ] Only usability blockers were repaired, with at most one rerun of the failed smoke check
+- [ ] No broader visual QA was run unless explicitly requested
 - [ ] External network dependencies disclosed
-- [ ] Local source delivered with `MEDIA:` or an absolute path
-- [ ] If public hosting was explicitly requested: public-copy safety, new random domain, HTTP 200, and SHA-256 verification passed
+- [ ] New random Surge URL returned HTTP 200 and passed SHA-256 body verification
+- [ ] Final response leads with the verified URL and includes the local source fallback

@@ -6,7 +6,7 @@ Public, installable skills for [Hermes Agent](https://github.com/NousResearch/he
 
 Turns supplied context into a polished, evidence-grounded HTML visual: diagrams, architecture maps, comparisons, reviews, timelines, dashboards, explainers, and slide decks.
 
-The skill activates only when explicitly requested (for example, “visualize this” or `/visualize-this`). It defaults to fast local delivery with one representative browser check. Mobile, interaction, accessibility, and publication checks run only when the artifact or request calls for them.
+The skill activates only when explicitly requested (for example, “visualize this” or `/visualize-this`). It performs only a static safety check and one render smoke test before publishing to a fresh disposable Surge URL. Broader visual QA runs only when explicitly requested.
 
 ### Install directly
 
@@ -27,9 +27,9 @@ After installation, start a fresh Hermes session (or run `/reset`) and invoke:
 /visualize-this
 ```
 
-### Optional public publishing
+### Surge publishing prerequisite
 
-Internal artifacts stay local by default. If you explicitly ask for a hosted or shareable URL, install and authenticate the Surge CLI once on the Hermes host:
+Every successful artifact is published to a fresh disposable Surge URL. Install and authenticate the Surge CLI once on the Hermes host:
 
 ```bash
 npm install --global surge
