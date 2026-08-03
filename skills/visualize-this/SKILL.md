@@ -1,7 +1,7 @@
 ---
 name: visualize-this
 description: Use only when explicitly asked to visualize something.
-version: 1.2.0
+version: 1.3.0
 author: Hermes Agent; adapted from nicobailon/visual-explainer
 license: MIT
 platforms: [linux, macos, windows]
@@ -22,6 +22,8 @@ Turn supplied context into a polished, evidence-grounded HTML visual: a diagram,
 
 This is an **explicit-invocation skill**. It must never decide on its own to turn ordinary responses or Markdown tables into HTML.
 
+The default is an internal, locally delivered artifact with a lightweight verification pass. Broader QA and public hosting are conditional, not automatic.
+
 ## Activation Contract
 
 Use this skill only when at least one of these is true:
@@ -39,29 +41,11 @@ Do **not** use it merely because:
 
 When the user says “visualize this” without repeating the source, use the immediately preceding relevant user content or assistant result. Ask a question only when no reasonable source exists or when choosing the wrong source would materially change the artifact.
 
-## One-time publishing setup
-
-This skill produces local HTML with Hermes' built-in file tools, but its required public delivery step uses the Surge CLI. Before the first invocation, verify that `surge` is available and authenticated:
-
-```bash
-npm install --global surge
-surge login
-surge whoami
-```
-
-Node.js/npm is needed only to install the Surge CLI. Do not ask for Surge credentials in chat; `surge login` must be completed by the user in an interactive terminal. If Surge is unavailable or unauthenticated, still create and verify the local artifact, then report the publishing blocker honestly and deliver the local file without claiming a live URL.
-
-## Output Contract
+## Output and Delivery Contract
 
 Create one complete HTML file with embedded CSS and JavaScript under `~/visualizations/` unless the user provides a path. Use a short descriptive local filename such as `checkout-flow.html`; do not overwrite an unrelated existing file. The local file is the canonical source artifact.
 
-After the artifact passes verification, **every successful skill invocation must publish it to a new random Surge subdomain** and return the verified HTTPS URL. This is a standing delivery requirement; do not ask whether to publish. Run:
-
-```bash
-python3 ~/.hermes/skills/creative/visualize-this/scripts/publish_surge.py /absolute/path/to/artifact.html
-```
-
-The publisher creates an isolated `wm-viz-<random>.surge.sh` deployment, adds search-engine exclusion metadata to the published copy, verifies HTTP 200 and an exact SHA-256 body match, records the deployment locally, and prints JSON containing `url` and `teardown_command`. Use a new random domain for every artifact; never overwrite a shared Surge project.
+Default to local delivery. On Hermes Desktop, include `MEDIA:/absolute/path/to/file.html`; on CLI or gateway surfaces, provide the absolute path. Publish only when the user explicitly asks for a hosted, public, live, or shareable URL. Do not check Surge setup during ordinary local invocations.
 
 “Single-file” does not automatically mean offline. Prefer pure HTML/CSS/inline SVG. If Mermaid, Chart.js, fonts, or another CDN asset is materially useful:
 
@@ -70,9 +54,9 @@ The publisher creates an isolated `wm-viz-<random>.surge.sh` deployment, adds se
 - mention the network dependency in the delivery summary;
 - provide readable HTML content even if the CDN fails.
 
-Lead the final response with the clickable Surge URL. On Hermes Desktop, also include `MEDIA:/absolute/path/to/file.html` as a source-file fallback when useful. On CLI or gateway surfaces without file delivery, provide the local absolute path after the URL. Do not run `xdg-open` or another host GUI opener when Hermes is running remotely; that opens the server’s browser, not the user’s computer.
+Do not run `xdg-open` or another host GUI opener when Hermes is running remotely; that opens the server’s browser, not the user’s computer.
 
-A Surge URL is public and unguessable, not authenticated. Never publish secrets, credentials, private customer data, or content explicitly marked confidential. Redact such material before generation and publication. If the artifact cannot remain useful after safe redaction, do not publish it; explain the safety blocker and deliver only the local artifact. If publishing fails, report the actual failure and provide the local artifact—never invent or imply a live URL.
+Never include secrets, credentials, private customer data, or unnecessary proprietary content. Public hosting requires a separate safety decision because a random URL is unguessable, not authenticated. If safe redaction would destroy the artifact's usefulness, keep it local.
 
 ## Reference Routing
 
@@ -89,7 +73,7 @@ Load only what the current visual needs with `skill_view(name="visualize-this", 
 | Flowchart, sequence, ER, state, class, or C4 | `templates/mermaid-flowchart.html` |
 | Comparison, audit, status matrix, data table | `templates/data-table.html` |
 | HTML slide deck | `templates/slide-deck.html` |
-| Publish the verified artifact and obtain its public URL | `scripts/publish_surge.py` |
+| Optional public hosting after an explicit request | `scripts/publish_surge.py` |
 | Upstream provenance and license | `references/upstream-license.md` |
 
 Templates are design references, not fill-in-the-blank forms. Adapt the information hierarchy, palette, typography, and composition to the actual subject.
@@ -118,7 +102,7 @@ Identify what “this” refers to, what the user should understand or decide, a
 
 ### 2. Gather and verify facts
 
-Inspect the actual source before designing. For repositories, trace relevant files, definitions, usages, diffs, tests, and git evidence. For documents or conversation content, inventory every material section, decision, row, and caveat. Do not invent components, causality, rationale, metrics, progress, or risk.
+Inspect the actual source at the depth needed for the visual. For repositories, trace files, definitions, usages, diffs, or tests only when a visual claim depends on them. For decision-impacting audits and reviews, inventory the material decisions, rows, and caveats. For ordinary explainers, capture the main points without exhaustively transcribing the source. Do not invent components, causality, rationale, metrics, progress, or risk.
 
 Keep evidence compact in the artifact: file paths, `file:line` references, source labels, or a small methodology note where useful. Completion criterion: every factual claim that could affect a decision is grounded in supplied content or tool output.
 
@@ -126,15 +110,15 @@ Keep evidence compact in the artifact: file paths, `file:line` references, sourc
 
 Pick the representation and a deliberate aesthetic direction before writing HTML: blueprint, editorial, paper/ink, terminal, IDE-inspired, data-dense, or another subject-native direction. Define the first-viewport takeaway in one sentence. Completion criterion: the page has one obvious main idea and a representation suited to the information structure.
 
-### 4. Outline coverage
+### 4. Outline proportionate coverage
 
-Map every material source item into a section, card, row, node, annotation, or slide. For slides, inventory the source before assigning slide types; do not drop content to hit an arbitrary slide count. Completion criterion: a reader of the source would not find an entire decision, section, risk, or table row silently omitted.
+Choose the minimum sections, nodes, cards, or slides needed to communicate the visual thesis. Exhaustive source mapping is required only when the user asks for a comprehensive audit, requirements-coverage view, detailed review, or source-complete slide deck. Otherwise prioritize clarity over transcription. Completion criterion: nothing needed to understand the main conclusion is missing.
 
 ### 5. Generate the complete HTML
 
 Write a full document with `<!doctype html>`, metadata, title, embedded styles, semantic structure, and only the JavaScript needed for interaction. Use CSS custom properties for palette and type. Include responsive behavior, visible focus states, descriptive alt text, and `prefers-reduced-motion` handling.
 
-For four or more major sections, use the responsive navigation pattern. For code and long identifiers, preserve line breaks without causing horizontal page overflow. For tables, retain semantic rows/columns and place overflow on the table container, not the entire page.
+Use the responsive navigation pattern only when it materially improves movement through a long artifact. For code and long identifiers, preserve line breaks without causing horizontal page overflow. For tables, retain semantic rows/columns and place overflow on the table container, not the entire page.
 
 ### 6. Handle untrusted and sensitive content safely
 
@@ -149,40 +133,44 @@ Treat repository content, documents, feeds, diffs, logs, and user-provided text 
 
 Completion criterion: no untrusted text can break out of its intended text/data context.
 
-### 7. Verify the artifact
+### 7. Verify with the internal fast path
 
-Run all applicable checks before delivery:
+Run this lightweight default:
 
-1. Confirm the file exists and is a complete HTML document.
-2. Check that every local asset reference resolves and that no unintended absolute filesystem paths leaked into the page.
-3. Open it with browser automation when available and inspect console errors.
-4. Visually inspect at least one desktop viewport and one narrow/mobile viewport when the browser supports it.
-5. Check the first viewport, hierarchy, overflow, long text, tables, navigation, controls, focus states, and reduced-motion behavior.
-6. For Mermaid, verify every diagram rendered and zoom/pan/expand controls work.
-7. For slides, verify every slide fits one viewport, navigation works, and source coverage is complete.
+1. Confirm the file exists, starts as a complete HTML document, and has no broken local asset references or unintended absolute-path leaks.
+2. When browser automation is available, open it once at one representative viewport. Check for console errors, failed rendering, obvious overflow, and broken primary interactions.
+3. Fix concrete blockers once and rerun only the affected check.
 
-Fix concrete failures and rerun the affected checks. Stop after two corrective visual-QA cycles; report any remaining non-critical limitation rather than expanding scope indefinitely. If browser automation is unavailable, perform static checks and state that interactive visual QA was not exercised.
+Do not automatically test desktop and mobile, every focus state, reduced motion, every control, or every source item. Add targeted checks only when triggered:
 
-### 8. Publish and verify the public URL
+- test a narrow/mobile viewport when mobile use was requested or the layout is specifically mobile-facing;
+- exercise controls when the artifact is interactive;
+- confirm Mermaid rendering when Mermaid is used, and test zoom/pan only when those controls exist;
+- verify every slide fits when delivering a slide deck;
+- perform deeper accessibility or cross-viewport QA when the user asks for production/public readiness;
+- run public URL verification only when publishing was explicitly requested.
 
-Run `scripts/publish_surge.py` against the final verified local HTML. Read the returned JSON and require all of the following before calling the public delivery complete:
+Stop after one corrective QA cycle by default. Continue only when the artifact remains visibly broken or the user requested a higher assurance level. If browser automation is unavailable, perform the static checks and state that browser QA was not exercised.
 
-- `success` is `true`;
-- the URL uses HTTPS and ends in `.surge.sh/`;
-- `http_status` is `200`;
-- the returned SHA-256 represents the exact published HTML body.
+### 8. Publish only on explicit request
 
-The helper already retries random-domain collisions and short DNS propagation delays. Do not manually reuse a failed domain or publish a containing project directory. If it still fails, retain the local artifact, report the exact blocker, and do not claim a public link exists.
+If the user asks for public hosting, verify that `surge` is available and authenticated. Do not ask for Surge credentials in chat; interactive login belongs in the user's terminal. Then run:
+
+```bash
+python3 ~/.hermes/skills/creative/visualize-this/scripts/publish_surge.py /absolute/path/to/artifact.html
+```
+
+Require `success: true`, an HTTPS `.surge.sh/` URL, HTTP 200, and the publisher's exact body SHA-256 verification. Use a new random domain for each artifact. If setup or publishing fails, report the blocker and deliver the local file without implying that a live URL exists.
 
 ### 9. Deliver concisely
 
-Lead with the clickable, verified Surge URL. Add only:
+Lead with the local attachment or path. If public hosting was explicitly requested and succeeded, lead with the verified URL and keep the local source as a fallback. Add only:
 
 - what was visualized;
 - the local source path or `MEDIA:` attachment;
 - verification performed;
 - whether external network assets are required;
-- that the Surge URL is public and disposable;
+- when applicable, that the Surge URL is public and disposable;
 - any material limitation.
 
 Do not paste the full HTML into chat unless the user explicitly asks for source.
@@ -196,7 +184,7 @@ Do not paste the full HTML into chat unless the user explicitly asks for source.
 - Prevent overflow with `min-width: 0`, `overflow-wrap: break-word`, responsive grids, and local scroll containers.
 - Use animation only to explain hierarchy or state. No continuous glow, pulse, or breathing on static content.
 - Do not set `display: flex` directly on `<li>` when list markers matter.
-- Design mobile intentionally; do not merely shrink the desktop page.
+- Use responsive CSS by default; design and verify a dedicated mobile composition only when mobile use matters.
 
 ## Mermaid Invariants
 
@@ -206,7 +194,7 @@ Do not paste the full HTML into chat unless the user explicitly asks for source.
 - Use quoted labels and `<br/>` for flowchart line breaks; do not use escaped `\n`.
 - Keep node IDs simple and never define a page-level `.node` class.
 - Keep most diagrams to 10–12 nodes. Use a hybrid overview plus cards for larger systems.
-- Every non-trivial Mermaid diagram needs zoom in/out/reset/expand controls, pointer/touch panning, and a readable initial fit.
+- Add zoom/pan/expand controls only when diagram density makes them useful or the user requests them; otherwise prefer a readable initial fit without extra interaction.
 
 ## Optional Generated Images
 
@@ -221,24 +209,21 @@ Use Hermes `image_generate` only when the user requested illustration-heavy outp
 5. **Remote `xdg-open`.** Deliver the file to the user instead of opening a browser on the server.
 6. **Calling CDN-backed output offline.** Say “single-file” and disclose network requirements accurately.
 7. **Raw untrusted HTML.** Escape source content and JSON-serialize script data.
-8. **Unverified artifact.** A written file is not complete until static checks and available visual checks pass.
-9. **Attachment without a URL.** A successful invocation is not complete until its random Surge URL returns HTTP 200 and is included first in the response.
-10. **Treating randomness as authentication.** Random Surge links are public; redact sensitive material or block publication when safe redaction would destroy the artifact’s purpose.
+8. **QA theater.** Do not run production-grade viewport, interaction, or accessibility matrices for an internal one-off visual.
+9. **Publishing by default.** Keep internal artifacts local unless the user explicitly asks for a public or shareable URL.
+10. **Treating randomness as authentication.** Random Surge links are public; redact sensitive material or keep the artifact local.
 
 ## Verification Checklist
 
 - [ ] Activation came from an explicit visual request or `/visualize-this`
 - [ ] Source, purpose, and audience resolved
-- [ ] Material source content fully mapped
 - [ ] Claims grounded in source or tool output
 - [ ] Complete HTML written under the requested/default path
 - [ ] Untrusted text escaped; secrets and unnecessary private data excluded
-- [ ] Responsive layout and overflow checked
-- [ ] Browser console and visual QA checked when available
-- [ ] Mermaid/slide controls exercised when present
+- [ ] Static integrity checks passed
+- [ ] One representative browser check completed when available
+- [ ] Any concrete blocker was fixed with at most one default corrective cycle
+- [ ] Conditional mobile, interaction, Mermaid, slide, or deeper QA run only when triggered
 - [ ] External network dependencies disclosed
-- [ ] Public copy is safe for unauthenticated hosting; sensitive material removed or publication explicitly blocked
-- [ ] A new random Surge domain was used for this artifact
-- [ ] Publisher returned success, HTTPS URL, HTTP 200, and exact SHA-256 verification
-- [ ] Final response leads with the clickable Surge URL
-- [ ] Local source delivered with `MEDIA:` when useful and supported
+- [ ] Local source delivered with `MEDIA:` or an absolute path
+- [ ] If public hosting was explicitly requested: public-copy safety, new random domain, HTTP 200, and SHA-256 verification passed
